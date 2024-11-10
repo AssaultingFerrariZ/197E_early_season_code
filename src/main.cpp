@@ -2,6 +2,8 @@
 #include "lemlib/api.hpp" // IWYU pragma: keep
 #include "lemlib/chassis/chassis.hpp"
 #include "lemlib/chassis/trackingWheel.hpp"
+#include "lemlib/pid.hpp"
+#include "lemlib/util.hpp"
 #include "liblvgl/llemu.hpp"
 #include "pros/abstract_motor.hpp"
 #include "pros/adi.hpp"
@@ -12,7 +14,13 @@
 #include "pros/motor_group.hpp"
 #include "pros/motors.h" // IWYU pragma: keep
 #include "pros/motors.hpp" // IWYU pragma: keep
+#include "pros/optical.hpp"
 #include "pros/rtos.hpp"
+#include "MotionProfile.hpp"
+#include "RamseteController.hpp"
+#include <math.h>
+#include <memory>
+#include <ostream>
 #include <sstream>
 /**
  * A callback function for LLEMU's center button.
@@ -20,6 +28,8 @@
  * When this callback is fired, it will toggle line 2 of the LCD text between
  * "I was pressed!" and nothing.
  */
+typedef std::shared_ptr<RTMotionProfile::Bezier> BezierPtr;
+
 pros::Controller master(pros::E_CONTROLLER_MASTER);
 template<typename T>
 std::string toString(T to) {
@@ -36,12 +46,16 @@ void on_center_button() {
 		pros::lcd::clear_line(2);
 	}
 }
+pros::Optical colorSensor(11);
+pros::Motor intake(19, pros::v5::MotorGears::blue, pros::v5::MotorEncoderUnits::deg);
+pros::MotorGroup ladyBrown({21}, pros::v5::MotorGears::green, pros::v5::MotorUnits::deg); 
+pros::Rotation ladyBrownRotation(2);
 pros::adi::DigitalOut mogo1('A');
 bool mogo1state = LOW;
 pros::adi::DigitalOut mogo2('B');
 bool mogo2state = LOW;
-pros::MotorGroup leftSide({10}, pros::v5::MotorGears::green, pros::v5::MotorEncoderUnits::deg);
-pros::MotorGroup rightSide({-1}, pros::v5::MotorGears::green, pros::v5::MotorEncoderUnits::deg);
+pros::MotorGroup leftSide({1, 12, 13}, pros::v5::MotorGears::blue, pros::v5::MotorEncoderUnits::deg);
+pros::MotorGroup rightSide({4, 7, 9}, pros::v5::MotorGears::blue, pros::v5::MotorEncoderUnits::deg);
 lemlib::Drivetrain drivetrain(&leftSide, &rightSide, -11.5, 4.125, 200, 8);
 // lateral PID controller
 lemlib::ControllerSettings lateral_controller(20, // proportional gain (kP)
@@ -66,30 +80,98 @@ lemlib::ControllerSettings angular_controller(2, // proportional gain (kP)
                                               500, // large error range timeout, in milliseconds
                                               0 // maximum acceleration (slew)
 );
-pros::Rotation horizontal_encoder(4);
-pros::Imu inertial(2);
+pros::Rotation horizontal_sensor(4);
+pros::Rotation vertical_sensor(4);
+pros::Imu imu(10);
 // vertical tracking wheel encoder
 // horizontal tracking wheel
-lemlib::TrackingWheel horizontal_tracking_wheel(&horizontal_encoder, lemlib::Omniwheel::NEW_2, -10.5);
+lemlib::TrackingWheel vertical_tracking_wheel(&vertical_sensor, lemlib::Omniwheel::NEW_2, -2.5);
+lemlib::TrackingWheel horizontal_tracking_wheel(&horizontal_sensor, lemlib::Omniwheel::NEW_2, -5.5);
 // vertical tracking wheel
-lemlib::OdomSensors odom(nullptr, nullptr, nullptr, nullptr, &inertial);
+lemlib::OdomSensors odom(&vertical_tracking_wheel, nullptr, &horizontal_tracking_wheel, nullptr, &imu);
 
-lemlib::Chassis robot(drivetrain, lateral_controller, angular_controller, odom);
+std::shared_ptr<lemlib::Chassis> robot(new lemlib::Chassis(drivetrain, lateral_controller, angular_controller, odom));
+// lemlib::Chassis robot=(lemlib::Chassis(drivetrain, lateral_controller, angular_controller, odom));
+
+const double MAX_SPEED = 450 * (3.25*M_PI) / 60;
+RTMotionProfile::Constraints mp_constraints(
+	MAX_SPEED,
+	MAX_SPEED*3, 
+	0.1, 
+	MAX_SPEED*3, 
+	MAX_SPEED*100, 
+	12);
+std::shared_ptr<RTMotionProfile::ProfileGenerator> generator(new RTMotionProfile::ProfileGenerator(
+	std::make_shared<RTMotionProfile::Constraints>(mp_constraints),
+	0.1
+));
+// std::shared_ptr<RamseteController> ramsete(new RamseteController(
+// 	robot, 
+// 	generator,
+// 	2.0,
+// 	0.7
+// ));
+
+bool armInLoadPos = false;
+const double BASE_ARM_POS = 60, LOAD_ARM_POS = 5, SCORE_ARM_POS = 120;
+lemlib::PID armPID(0.1, 0, 0, 3, false);
+
+void armMacro() {
+	pros::lcd::clear();
+	armPID.reset();
+	while (master.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) {
+		double error = SCORE_ARM_POS - ladyBrownRotation.get_angle();
+		double output = armPID.update(error);
+		// ladyBrown.move(output);
+		pros::lcd::print(1, "Scoring Position");
+		pros::lcd::print(2, "Error: %.2f", error);
+		pros::lcd::print(3, "Angle: %.2f", ladyBrownRotation.get_angle());
+		if (error <= 1) {
+			armInLoadPos = !armInLoadPos;
+			break;
+		}
+		pros::delay(10);
+	}
+	pros::lcd::clear();
+	armInLoadPos = !armInLoadPos;
+	while (1) {
+		double error = (armInLoadPos ? LOAD_ARM_POS : BASE_ARM_POS) - ladyBrownRotation.get_angle();
+		double output = armPID.update(error);
+		// ladyBrown.move(output);
+		pros::lcd::print(1, "Retracting Position");
+		pros::lcd::print(2, "Error: %.2f", error);
+		pros::lcd::print(3, "Angle: %.2f", ladyBrownRotation.get_angle());
+		pros::lcd::print(4, (armInLoadPos ? "retracting to loading position" : "retracting to non-loading position"));
+		if (error <= 1) break;
+		pros::delay(10);
+
+	}
+}
+
 /**
- * Runs initialization code. This occurs as soon as the program is started.
+ * Runs initialization code. This occuras soon as the program is started.
  *
  * All other competition modes are blocked by initialize; it is recommended
  * to keep execution time for this mode under a few seconds.
  */
 void initialize() {
-	robot.calibrate();
+	robot->calibrate();
 	pros::lcd::initialize();
 	pros::Task screenTask([&] {
 		while (1) {
-			pros::lcd::print(3, "%.2f Heading", robot.getPose().theta);  // Prints status of the emulated screen LCDs
-			pros::lcd::print(1, "%.2f X", robot.getPose().x);  // Prints status of the emulated screen LCDs
-			pros::lcd::print(2, "%.2f Y", robot.getPose().y);  // Prints status of the emulated screen LCDs
+			pros::lcd::print(3, "%.2f Heading", robot->getPose().theta);  // Prints status of the emulated screen LCDs
+			pros::lcd::print(1, "%.2f X", robot->getPose().x);  // Prints status of the emulated screen LCDs
+			pros::lcd::print(2, "%.2f Y", robot->getPose().y);  // Prints status of the emulated screen LCDs
 			pros::delay(20);
+		}
+	});
+
+	pros::Task armTask([&] {
+		while (1) {
+			if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_R1)) {
+				armMacro();
+			}
+			pros::delay(10);
 		}
 	});
 }
@@ -129,24 +211,24 @@ float speedRatio(double percent) {
 }
 void autonomous() {
 	// master.clear();
-	robot.setPose(0, 0, 0);
-	robot.moveToPose(12, 24, 0, 5000, {
+	robot->setPose(0, 0, 0);
+	robot->moveToPose(12, 24, 0, 5000, {
 		.minSpeed = (127.0/2),
 		.earlyExitRange = 1
 	});
-	robot.moveToPose(0, 36, 0, 5000, {
+	robot->moveToPose(0, 36, 0, 5000, {
 		.minSpeed = speedRatio(75),
 		.earlyExitRange = 5
 	});
-	robot.moveToPose(-12, 24, 90, 5000, {
+	robot->moveToPose(-12, 24, 90, 5000, {
 		.forwards = false, 
 		// .lead = 0.4,
 		// .minSpeed = speedRatio(35), 
 		// .earlyExitRange = 1,
 	});
-	robot.moveToPose(0, 0, 0, 5000, {.forwards = false});
-	// robot.moveToPose(15, 15, 0, 5000, {.minSpeed = 72, .earlyExitRange = 8});
-	// robot.moveToPose(30, 0, 0, 5000);
+	robot->moveToPose(0, 0, 0, 5000, {.forwards = false});
+	// robot->moveToPose(15, 15, 0, 5000, {.minSpeed = 72, .earlyExitRange = 8});
+	// robot->moveToPose(30, 0, 0, 5000);
 }
 /**
  * Runs the operator control code. This function will be started in its own task
@@ -162,7 +244,15 @@ void autonomous() {
  * task, not resume it from where it left off.
  */
 void opcontrol() {
-	robot.cancelAllMotions();
+	robot->cancelAllMotions();
+	//profile generation benchmarking
+	BezierPtr testPath;
+	int start_time = pros::millis();
+	testPath = std::make_shared<RTMotionProfile::Bezier>(RTMotionProfile::Bezier({-12, -36}, {-12, -60}, {-36, -36}, {-36, -60}));
+	generator->generateProfile(testPath);
+	int end_time = pros::millis();
+	std::cout << "Start Time: " << start_time << "ms, End Time: " << end_time << "ms, Total Time: " << end_time - start_time << "ms, " << std::endl;
+	std::cout << "Length: " << generator->getProfile().size() * generator->get_delta_d() << " in" << std::endl;
 	while (true) {
 		if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_A)) {
 			mogo1state = !mogo1state;
@@ -170,8 +260,10 @@ void opcontrol() {
 			mogo1.set_value(mogo1state);
 			mogo2.set_value(mogo2state);
 		}
-		robot.arcade(master.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y), master.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X));
-		
+		robot->arcade(master.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y), master.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X));
+		if (master.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) intake.move(127);
+		else if (master.get_digital(pros::E_CONTROLLER_DIGITAL_L1)) intake.move(-127);
+		else intake.move(0);
 		// Arcade control scheme
 		// Sets right motor voltage
 		pros::delay(20); // Run for 20 ms then update

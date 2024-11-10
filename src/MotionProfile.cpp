@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <memory>
 #include <utility>
 #include <vector>
 #include <math.h>
@@ -135,7 +136,7 @@ std::pair<double, double> RTMotionProfile::Constraints::wheelSpeeds(double angul
     return {left_vel, right_vel};
 }
 
-RTMotionProfile::TrapezoidalProfile::TrapezoidalProfile(RTMotionProfile::Constraints* constraints, double length, double start_vel, double end_vel) {
+RTMotionProfile::TrapezoidalProfile::TrapezoidalProfile(std::shared_ptr<Constraints> constraints, double length, double start_vel, double end_vel) {
     this->constraints = constraints;
     this->length = length;
     this->start_vel = start_vel;
@@ -157,12 +158,12 @@ double RTMotionProfile::TrapezoidalProfile::get_vel_at_dist(double dist) {
     else return std::sqrt(this->cruise_vel*this->cruise_vel+2*this->constraints->max_dec*(dist-this->decel_dist));
 }
 
-RTMotionProfile::ProfileGenerator::ProfileGenerator(RTMotionProfile::Constraints* constraints, double dd) {
+RTMotionProfile::ProfileGenerator::ProfileGenerator(std::shared_ptr<Constraints> constraints, double dd) {
     this->constraints = constraints;
     this->dd = dd;
 }
 
-void RTMotionProfile::ProfileGenerator::generateProfile(abstractPath* path) {
+void RTMotionProfile::ProfileGenerator::generateProfile(std::shared_ptr<abstractPath> path) {
     this->profile.clear();
     double dist = this->dd;
     double vel = 0.0001;
@@ -234,3 +235,5 @@ RTMotionProfile::ChassisSpeeds RTMotionProfile::ProfileGenerator::getProfilePoin
         this->profile[index].y,
         this->profile[index].theta));
 }
+
+double RTMotionProfile::ProfileGenerator::get_delta_d() { return this->dd; }
