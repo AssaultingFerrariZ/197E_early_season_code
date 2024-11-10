@@ -2,6 +2,8 @@
 #include "lemlib/api.hpp" // IWYU pragma: keep
 #include "lemlib/chassis/chassis.hpp"
 #include "lemlib/chassis/trackingWheel.hpp"
+#include "lemlib/logger/logger.hpp"
+#include "lemlib/logger/message.hpp"
 #include "lemlib/pid.hpp"
 #include "lemlib/util.hpp"
 #include "liblvgl/llemu.hpp"
@@ -15,9 +17,11 @@
 #include "pros/motors.h" // IWYU pragma: keep
 #include "pros/motors.hpp" // IWYU pragma: keep
 #include "pros/optical.hpp"
+#include "pros/rtos.h"
 #include "pros/rtos.hpp"
 #include "MotionProfile.hpp"
 #include "RamseteController.hpp"
+#include <cstddef>
 #include <math.h>
 #include <memory>
 #include <ostream>
@@ -112,19 +116,23 @@ std::shared_ptr<RTMotionProfile::ProfileGenerator> generator(new RTMotionProfile
 // 	0.7
 // ));
 
-bool armInLoadPos = false;
 const double BASE_ARM_POS = 60, LOAD_ARM_POS = 5, SCORE_ARM_POS = 120;
 
+void fakeTask() {
+	std::cout << "Task Ran" << std::endl;
+}
+
 void armMacro() {
-	pros::lcd::clear();
+	static bool armInLoadPos = false;
+	std::cout << "Task Entered" << std::endl;
 	lemlib::PID armPID(0.1, 0, 0, 3, false);
 	while (master.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) {
 		double error = SCORE_ARM_POS - ladyBrownRotation.get_angle();
 		double output = armPID.update(error);
 		// ladyBrown.move(output);
-		pros::lcd::print(1, "Scoring Position");
-		pros::lcd::print(2, "Error: %.2f", error);
-		pros::lcd::print(3, "Angle: %.2f", ladyBrownRotation.get_angle());
+		// pros::lcd::print(1, "Scoring Position");
+		// pros::lcd::print(2, "Error: %.2f", error);
+		// pros::lcd::print(3, "Angle: %.2f", ladyBrownRotation.get_angle());
 		if (error <= 1) {
 			armInLoadPos = !armInLoadPos;
 			break;
@@ -137,10 +145,10 @@ void armMacro() {
 		double error = (armInLoadPos ? LOAD_ARM_POS : BASE_ARM_POS) - ladyBrownRotation.get_angle();
 		double output = armPID.update(error);
 		// ladyBrown.move(output);
-		pros::lcd::print(1, "Retracting Position");
-		pros::lcd::print(2, "Error: %.2f", error);
-		pros::lcd::print(3, "Angle: %.2f", ladyBrownRotation.get_angle());
-		pros::lcd::print(4, (armInLoadPos ? "retracting to loading position" : "retracting to non-loading position"));
+		// pros::lcd::print(1, "Retracting Position");
+		// pros::lcd::print(2, "Error: %.2f", error);
+		// pros::lcd::print(3, "Angle: %.2f", ladyBrownRotation.get_angle());
+		// pros::lcd::print(4, (armInLoadPos ? "retracting to loading position" : "retracting to non-loading position"));
 		if (error <= 1) break;
 		pros::delay(10);
 
@@ -156,14 +164,14 @@ void armMacro() {
 void initialize() {
 	robot->calibrate();
 	pros::lcd::initialize();
-	pros::Task screenTask([&] {
-		while (1) {
-			pros::lcd::print(3, "%.2f Heading", robot->getPose().theta);  // Prints status of the emulated screen LCDs
-			pros::lcd::print(1, "%.2f X", robot->getPose().x);  // Prints status of the emulated screen LCDs
-			pros::lcd::print(2, "%.2f Y", robot->getPose().y);  // Prints status of the emulated screen LCDs
-			pros::delay(20);
-		}
-	});
+	// pros::Task screenTask([&] {
+	// 	while (1) {
+	// 		pros::lcd::print(3, "%.2f Heading", robot->getPose().theta);  // Prints status of the emulated screen LCDs
+	// 		pros::lcd::print(1, "%.2f X", robot->getPose().x);  // Prints status of the emulated screen LCDs
+	// 		pros::lcd::print(2, "%.2f Y", robot->getPose().y);  // Prints status of the emulated screen LCDs
+	// 		pros::delay(20);
+	// 	}
+	// });
 }
 
 /**
@@ -234,6 +242,7 @@ void autonomous() {
  * task, not resume it from where it left off.
  */
 void opcontrol() {
+	static std::shared_ptr<pros::Task> armLiftTask = nullptr;  // Static pointer to track the armLift task
 	robot->cancelAllMotions();
 	//profile generation benchmarking
 	BezierPtr testPath;
@@ -256,8 +265,21 @@ void opcontrol() {
 		else intake.move(0);
 
 		if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_R1)) {
-			pros::Task armLiftAsync(armMacro);
-		}
+            if (armLiftTask != nullptr) {
+                if (armLiftTask->get_state() == pros::E_TASK_STATE_RUNNING) {
+                    std::cout << "Previous task still running" << std::endl;
+                    continue;
+                }
+                
+                std::cout << "Removing previous task" << std::endl;
+                armLiftTask->remove();  // Remove previous task if it exists
+                armLiftTask = nullptr;  // Reset the task pointer after removal
+            }
+
+            std::cout << "Starting new task" << std::endl;
+            armLiftTask = std::make_shared<pros::Task>(armMacro);  // Launch the armMacro task
+        }
+
 		// Arcade control scheme
 		// Sets right motor voltage
 		pros::delay(20); // Run for 20 ms then update
