@@ -910,6 +910,8 @@ class Chassis {
          * @warning Do not interact with these unless you know what you are doing
          */
         PID angularPID;
+
+        Drivetrain get_drivetrain() {return this->drivetrain;}
     protected:
         /**
          * @brief Indicates that this motion is queued and blocks current task until this motion reaches front of queue

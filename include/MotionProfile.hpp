@@ -2,7 +2,9 @@
 #include <vector>
 #include "Eigen/Dense"
 #include "Eigen/src/Core/Matrix.h"
+#include <memory>
 namespace RTMotionProfile {
+
     struct Point {
         public:
             double x;
@@ -19,11 +21,10 @@ namespace RTMotionProfile {
 
     };
     struct Pose {
-        private:
+        public:
             double x;
             double y;
             double theta;
-        public: 
             double getDistance(Pose pose);
             double getHeading(Pose pose);
             Pose(double x, double y, double theta){
@@ -117,13 +118,13 @@ namespace RTMotionProfile {
     };
     class ProfileGenerator {
     public:
-        ProfileGenerator(Constraints *constraints, double dd);
-        void generateProfile(abstractPath *path);
+        ProfileGenerator(std::shared_ptr<Constraints> constraints, double dd);
+        void generateProfile(std::shared_ptr<abstractPath> path);
         ChassisSpeeds getProfilePoint(double d);
         auto getProfile() { return profile; }
-
+        double get_delta_d();
     private:
-        Constraints *constraints;
+        std::shared_ptr<Constraints> constraints;
         MotionProfile profile;
         double dd;
         double duration;
@@ -132,11 +133,11 @@ namespace RTMotionProfile {
     class TrapezoidalProfile
     {
     public:
-        TrapezoidalProfile(Constraints *constraints, double length, double start_vel = 0, double end_vel = 0);
+        TrapezoidalProfile(std::shared_ptr<Constraints> constraints, double length, double start_vel = 0, double end_vel = 0);
         double get_vel_at_dist(double dist);
 
     private:
-        Constraints *constraints;
+        std::shared_ptr<Constraints> constraints;
         double length;
         double start_vel;
         double end_vel;
