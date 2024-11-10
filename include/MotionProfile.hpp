@@ -3,6 +3,7 @@
 #include "Eigen/Dense"
 #include "Eigen/src/Core/Matrix.h"
 namespace RTMotionProfile {
+
     struct Point {
         public:
             double x;
