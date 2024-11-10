@@ -114,11 +114,10 @@ std::shared_ptr<RTMotionProfile::ProfileGenerator> generator(new RTMotionProfile
 
 bool armInLoadPos = false;
 const double BASE_ARM_POS = 60, LOAD_ARM_POS = 5, SCORE_ARM_POS = 120;
-lemlib::PID armPID(0.1, 0, 0, 3, false);
 
 void armMacro() {
 	pros::lcd::clear();
-	armPID.reset();
+	lemlib::PID armPID(0.1, 0, 0, 3, false);
 	while (master.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) {
 		double error = SCORE_ARM_POS - ladyBrownRotation.get_angle();
 		double output = armPID.update(error);
@@ -163,15 +162,6 @@ void initialize() {
 			pros::lcd::print(1, "%.2f X", robot->getPose().x);  // Prints status of the emulated screen LCDs
 			pros::lcd::print(2, "%.2f Y", robot->getPose().y);  // Prints status of the emulated screen LCDs
 			pros::delay(20);
-		}
-	});
-
-	pros::Task armTask([&] {
-		while (1) {
-			if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_R1)) {
-				armMacro();
-			}
-			pros::delay(10);
 		}
 	});
 }
@@ -264,6 +254,10 @@ void opcontrol() {
 		if (master.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) intake.move(127);
 		else if (master.get_digital(pros::E_CONTROLLER_DIGITAL_L1)) intake.move(-127);
 		else intake.move(0);
+
+		if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_R1)) {
+			pros::Task armLiftAsync(armMacro);
+		}
 		// Arcade control scheme
 		// Sets right motor voltage
 		pros::delay(20); // Run for 20 ms then update
