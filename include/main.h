@@ -49,6 +49,9 @@
 #include <map>
 #include <utility>
 #include "pros/misc.h"
+#include "pros/llemu.hpp"
+#include "pros/misc.hpp"
+#include "pros/rtos.hpp"
 /**
  * You should add more #includes here
  */

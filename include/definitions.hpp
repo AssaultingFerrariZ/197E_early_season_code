@@ -5,15 +5,23 @@
 #include "autons.hpp"
 #include "MotionProfile.hpp"
 #include "RamseteController.hpp"
+#include "pros/adi.hpp"
+
 
 extern pros::Optical colorSensor;
+
 extern pros::Motor intake;
 extern pros::MotorGroup ladyBrown;
 extern pros::Rotation ladyBrownRotation;
+
 extern pros::adi::DigitalOut mogo1;
-extern bool mogo1state;
+extern bool mogoState;
 extern pros::adi::DigitalOut mogo2;
-extern bool mogo2state;
+
+extern pros::adi::DigitalOut hang1;
+extern bool hangState;
+extern pros::adi::DigitalOut hang2;
+
 extern pros::MotorGroup leftSide;
 extern pros::MotorGroup rightSide;
 extern lemlib::Drivetrain drivetrain;
@@ -30,16 +38,16 @@ extern const double MAX_SPEED;
 extern RTMotionProfile::Constraints mp_constraints;
 extern std::shared_ptr<RTMotionProfile::ProfileGenerator> generator;
 extern std::shared_ptr<RamseteController> ramsete;
-extern bool stopIntake;
+extern bool stopIntakeControl;
 extern bool redSide;
 extern bool color_sorting_enabled;
 
-// Autonomous selector map: stores pairs of function and string for auton selection
 extern std::map<int, std::pair<std::string, std::function<void()>>> autonSelectorMap;
 
-// Arm position constants
 extern const double BASE_ARM_POS;
 extern const double LOAD_ARM_POS;
 extern const double SCORE_ARM_POS;
+
+extern bool arm_in_load_pos;
 
 extern int currentAutoSelection;

@@ -7,9 +7,13 @@ pros::Motor intake(19, pros::v5::MotorGears::blue, pros::v5::MotorEncoderUnits::
 pros::MotorGroup ladyBrown({5, -6}, pros::v5::MotorGears::green, pros::v5::MotorEncoderUnits::deg); 
 pros::Rotation ladyBrownRotation(2);
 pros::adi::DigitalOut mogo1('A');
-bool mogo1state = LOW;
+bool mogoState = LOW;
 pros::adi::DigitalOut mogo2('B');
-bool mogo2state = LOW;
+
+pros::adi::DigitalOut hang1('C');
+pros::adi::DigitalOut hang2('D');
+bool hangState = LOW;
+
 pros::MotorGroup leftSide({1, 12, 13}, pros::v5::MotorGears::blue, pros::v5::MotorEncoderUnits::deg);
 pros::MotorGroup rightSide({4, 7, 9}, pros::v5::MotorGears::blue, pros::v5::MotorEncoderUnits::deg);
 
@@ -63,7 +67,7 @@ std::shared_ptr<RamseteController> ramsete(new RamseteController(
 ));
 
 // Global variables initialization
-bool stopIntake = false;
+bool stopIntakeControl = false;
 bool redSide = false;
 bool color_sorting_enabled = true;
 
@@ -76,6 +80,8 @@ std::map<int, std::pair<std::string, std::function<void()>>> autonSelectorMap = 
     {5, {"Skills", skills}},  
 
 };
+
+bool arm_in_load_pos = false;
 
 // Arm position constants
 const double BASE_ARM_POS = 340;

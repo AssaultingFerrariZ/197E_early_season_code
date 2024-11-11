@@ -1,6 +1,5 @@
-#include "autons.hpp"
 #include "definitions.hpp"
-#include "pros/misc.hpp"
+
 #include "main.h"
 /**
  * A callback function for LLEMU's center button.
@@ -39,25 +38,17 @@ float clamp(float output, float min, float max) {
 	return output;
 }
 
-void armMacro() {
-	static bool armInLoadPos = false;
-	static lemlib::PID retractPID(1.1, 0.3, 0, 2, false);
+void scoreArm() {
 	static lemlib::PID scorePID(3.2, 0, 0, 0, false);
-	retractPID.reset();
 	scorePID.reset();
-	std::cout << "function began" << std::endl;
 	double time = 0;
 	while (master.get_digital(pros::E_CONTROLLER_DIGITAL_R1) && !master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_DOWN)) {
 		double error = wrap180(SCORE_ARM_POS - (ladyBrownRotation.get_angle() / 100.0));
 		double output = clamp(scorePID.update(error), -127, 127);
 		// std::cout << "Error: " << error <<", Angle: " << ladyBrownRotation.get_angle() / 100. << ", Output: " << output << ", Scoring Position" << std::endl;
 		ladyBrown.move(output);
-		// pros::lcd::print(1, "Scoring Position");
-		// pros::lcd::print(2, "Error: %.2f", error);
-		// pros::lcd::print(3, "Angle: %.2f", ladyBrownRotation.get_angle());
 		if (fabs(error) <= 5 || time > 2500) {
-			armInLoadPos = !armInLoadPos;
-			// scorePID.print_integral();
+			arm_in_load_pos = !arm_in_load_pos;
 			scorePID.reset();
 			break;
 		}
@@ -65,16 +56,17 @@ void armMacro() {
 		time += 10; 
 		pros::delay(10);
 	}
-	armInLoadPos = !armInLoadPos;
-	time = 0;
+}
+
+void retractArm() {
+	static lemlib::PID retractPID(1.1, 0.3, 0, 2, false);
+	retractPID.reset();
+	double time = 0;
 	while (!master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_DOWN)) {
-		double error = wrap180((armInLoadPos ? LOAD_ARM_POS : BASE_ARM_POS) - ladyBrownRotation.get_angle() / 100.0);
+		double error = wrap180((arm_in_load_pos ? LOAD_ARM_POS : BASE_ARM_POS) - ladyBrownRotation.get_angle() / 100.0);
 		double output = clamp(retractPID.update(error), -127, 127);
 		ladyBrown.move(output);
-		// pros::lcd::print(1, "Retracting Position");
-		// pros::lcd::print(2, "Error: %.2f", error);
-		// pros::lcd::print(3, "Angle: %.2f", ladyBrownRotation.get_angle());
-		// std::cout << "Error: " << error <<", Angle: " << ladyBrownRotation.get_angle() / 100.0 << ", Output: " << output << ", Loading Position: " << armInLoadPos << std::endl;
+		
 		if (fabs(error) <= 0.4 || time > 3000) {
 			retractPID.print_integral();
 			retractPID.reset();
@@ -85,6 +77,13 @@ void armMacro() {
 		pros::delay(10);
 
 	}
+	
+}
+
+void armMacro() {
+	scoreArm();
+	arm_in_load_pos = !arm_in_load_pos;
+	retractArm();
 	ladyBrown.brake();
 }
 /**
@@ -97,14 +96,14 @@ void initialize() {
 	robot->calibrate();
 	pros::lcd::initialize();
 	ladyBrown.set_brake_mode_all(pros::v5::MotorBrake::hold); 
-	// pros::Task screenTask([&] {
-	// 	while (1) {
-	// 		pros::lcd::print(3, "%.2f Heading", robot->getPose().theta);  // Prints status of the emulated screen LCDs
-	// 		pros::lcd::print(1, "%.2f X", robot->getPose().x);  // Prints status of the emulated screen LCDs
-	// 		pros::lcd::print(2, "%.2f Y", robot->getPose().y);  // Prints status of the emulated screen LCDs
-	// 		pros::delay(20);
-	// 	}
-	// });
+	pros::Task screenTask([&] {
+		while (1) {
+			pros::lcd::print(3, "%.2f Heading", robot->getPose().theta);  // Prints status of the emulated screen LCDs
+			pros::lcd::print(1, "%.2f X", robot->getPose().x);  // Prints status of the emulated screen LCDs
+			pros::lcd::print(2, "%.2f Y", robot->getPose().y);  // Prints status of the emulated screen LCDs
+			pros::delay(20);
+		}
+	});
 	pros::Task armLiftTask([&] {
 		while (1) {
 			if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) {
@@ -114,22 +113,37 @@ void initialize() {
 			pros::delay(10);
 		}
 	});
+	
+	//run the function in a task for asynchronous detection for both auton and driver
 	pros::Task colorSorter([&] {
-		while (1) {
+		while (1) { //infinitely loop the task for the program's lifetime
+
+
 			bool ringColorRed = (colorSensor.get_rgb().red > colorSensor.get_rgb().blue);
+
 			if (colorSensor.get_proximity() > 230 && color_sorting_enabled) {
 				if (ringColorRed == redSide) continue;
 				else {
-					stopIntake = true;
+					stopIntakeControl = true;
 					pros::delay(35);
 					intake.move(0);
 					pros::delay(750);
-					stopIntake = false;
+					stopIntakeControl = false;
+					intake.move(127);
 				}
 			}
 			pros::delay(10);
 		}
 	});	
+
+	pros::Task setPistons([&] {
+		mogo1.set_value(mogoState);
+		mogo2.set_value(mogoState);
+		hang1.set_value(hangState);
+		hang2.set_value(hangState);
+		pros::delay(20);
+	});
+
 	master.clear();
 	
 }
@@ -151,9 +165,7 @@ void disabled() {}
  * starts.""
  */
 
-void competition_initialize() {
-	
-}
+void competition_initialize() {}
 
 /**
  * Runs the user autonomous code. This function will be started in its own tas
@@ -202,29 +214,31 @@ void opcontrol() {
 	
 	bool autoSelected = false;
 	master.print(2, 1, "Select Auton");
-	while (!autoSelected && pros::competition::is_disabled()) {
+	while (!autoSelected) {
 		if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_LEFT)) {
+			master.clear_line(2);
+			pros::delay(50);
 			currentAutoSelection = (int)clamp(currentAutoSelection-1, 1, autonSelectorMap.size());
 			master.print(2, 1, autonSelectorMap[currentAutoSelection].first.c_str());
 		}
 		if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_RIGHT)) {
+			master.clear_line(2);
+			pros::delay(50);
 			currentAutoSelection = (int)clamp(currentAutoSelection+1, 1, autonSelectorMap.size());
 			master.print(2, 1, autonSelectorMap[currentAutoSelection].first.c_str());
 		}
 		if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_A)) {
+			master.clear();
 			autoSelected = true;
 		}
 	}
 	
 	while (true) {
 		if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_A)) {
-			mogo1state = !mogo1state;
-			mogo2state = !mogo2state;
-			mogo1.set_value(mogo1state);
-			mogo2.set_value(mogo2state);
+			mogoState = !mogoState;
 		}
 		robot->arcade(master.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y), master.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X));
-		if (!stopIntake) {
+		if (!stopIntakeControl) {
 			if (master.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) intake.move(127);
 			else if (master.get_digital(pros::E_CONTROLLER_DIGITAL_L1)) intake.move(-127);
 			else intake.move(0);
