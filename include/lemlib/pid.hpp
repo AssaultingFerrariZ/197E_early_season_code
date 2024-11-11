@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cstdio>
+#include <iostream>
+#include <string>
 namespace lemlib {
 class PID {
     public:
@@ -60,6 +63,10 @@ class PID {
          * @endcode
          */
         void reset();
+
+        void print_integral() {
+            std::cout << "Integral: " << this->integral * this->kI << std::endl;
+        }
     protected:
         // gains
         const float kP;

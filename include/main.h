@@ -35,7 +35,20 @@
 #define PROS_USE_LITERALS
 
 #include "api.h"
-
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <iostream>
+#include <map>
+#include <math.h>
+#include <memory>
+#include <ostream>
+#include <sstream>
+#include <string>
+#include <functional>
+#include <map>
+#include <utility>
+#include "pros/misc.h"
 /**
  * You should add more #includes here
  */
