@@ -1,5 +1,7 @@
 #include "definitions.hpp"
 #include "autons.hpp"
+#include "pros/adi.hpp"
+
 
 // Sensor and motor initialization
 pros::Optical colorSensor(11);
@@ -8,32 +10,57 @@ pros::MotorGroup ladyBrown({5, -6}, pros::v5::MotorGears::green, pros::v5::Motor
 pros::Rotation ladyBrownRotation(2);
 pros::adi::DigitalOut mogo1('A');
 bool mogoState = LOW;
-pros::adi::DigitalOut mogo2('B');
+pros::adi::DigitalOut mogo2('F');
 
-pros::adi::DigitalOut hang1('C');
-pros::adi::DigitalOut hang2('D');
+pros::adi::DigitalOut hang('E');
+pros::adi::DigitalOut doinker('H');
 bool hangState = LOW;
 
-pros::MotorGroup leftSide({1, 12, 13}, pros::v5::MotorGears::blue, pros::v5::MotorEncoderUnits::deg);
-pros::MotorGroup rightSide({4, 7, 9}, pros::v5::MotorGears::blue, pros::v5::MotorEncoderUnits::deg);
+bool autoSelected = false;
+
+bool doinkerState = LOW;
+
+pros::adi::DigitalOut intakeLift('D');
+
+
+pros::MotorGroup leftSide({1, -12, -13}, pros::v5::MotorGears::blue, pros::v5::MotorEncoderUnits::deg);
+pros::MotorGroup rightSide({-4, 7, 9}, pros::v5::MotorGears::blue, pros::v5::MotorEncoderUnits::deg);
 
 // Drivetrain setup
-lemlib::Drivetrain drivetrain(&leftSide, &rightSide, -11.5, 4.125, 200, 8);
+lemlib::Drivetrain drivetrain(&leftSide, &rightSide, 13.5, 3.25, 450, 8);
 
 // Lateral PID controller configuration
-lemlib::ControllerSettings lateral_controller(20, 0, 3, 0, 1, 100, 3, 500, 20);
+lemlib::ControllerSettings lateral_controller(
+    8, 
+    0, 
+    12, 
+    0, 
+    1, 
+    100, 
+    3, 
+    500, 
+    20);
 
 // Angular PID controller configuration
-lemlib::ControllerSettings angular_controller(2, 0, 1, 3, 2, 100, 5, 500, 0);
+lemlib::ControllerSettings angular_controller(
+    2, 
+    0, 
+    5, 
+    0, 
+    0, 
+    0, 
+    0, 
+    0, 
+    0);
 
 // Sensors
-pros::Rotation horizontal_sensor(4);
-pros::Rotation vertical_sensor(4);
-pros::Imu imu(10);
+pros::Rotation horizontal_sensor(18);
+pros::Rotation vertical_sensor(20);
+pros::Imu imu(17);
 
 // Tracking wheels setup
-lemlib::TrackingWheel vertical_tracking_wheel(&vertical_sensor, lemlib::Omniwheel::NEW_2, -2.5);
-lemlib::TrackingWheel horizontal_tracking_wheel(&horizontal_sensor, lemlib::Omniwheel::NEW_2, -5.5);
+lemlib::TrackingWheel vertical_tracking_wheel(&vertical_sensor, lemlib::Omniwheel::NEW_2, 0);
+lemlib::TrackingWheel horizontal_tracking_wheel(&horizontal_sensor, lemlib::Omniwheel::NEW_2, -5);
 
 // Odometer setup
 lemlib::OdomSensors odom(&vertical_tracking_wheel, nullptr, &horizontal_tracking_wheel, nullptr, &imu);
@@ -88,5 +115,5 @@ const double BASE_ARM_POS = 340;
 const double LOAD_ARM_POS = 3.67;
 const double SCORE_ARM_POS = 120;
 
-int currentAutoSelection = -1;
+int currentAutoSelection = 1;
 

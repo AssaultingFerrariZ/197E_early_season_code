@@ -1,5 +1,6 @@
 #include "MotionProfile.hpp"
 #include "Eigen/src/Core/Matrix.h"
+#include "lemlib/chassis/chassis.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -237,3 +238,17 @@ RTMotionProfile::ChassisSpeeds RTMotionProfile::ProfileGenerator::getProfilePoin
 }
 
 double RTMotionProfile::ProfileGenerator::get_delta_d() { return this->dd; }
+
+void RTMotionProfile::ProfileGenerator::followProfile(std::shared_ptr<lemlib::Chassis> _chassis) {
+    double totalDistance = this->getProfile().back().dist;
+    double delta_d = this->get_delta_d();
+    for (double d = 0; d <= totalDistance; d+=delta_d) {
+        auto wheelSpeeds = this->getProfilePoint(d);
+        
+        _chassis->get_drivetrain().leftMotors->move(wheelSpeeds.vel-wheelSpeeds.omega);
+        _chassis->get_drivetrain().rightMotors->move(wheelSpeeds.vel+wheelSpeeds.omega);
+        pros::delay(this->get_delta_d());
+    }  
+    _chassis->get_drivetrain().leftMotors->move(0);
+    _chassis->get_drivetrain().rightMotors->move(0);
+}

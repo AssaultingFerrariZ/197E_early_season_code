@@ -7,7 +7,6 @@
 #include "RamseteController.hpp"
 #include "pros/adi.hpp"
 
-
 extern pros::Optical colorSensor;
 
 extern pros::Motor intake;
@@ -18,9 +17,15 @@ extern pros::adi::DigitalOut mogo1;
 extern bool mogoState;
 extern pros::adi::DigitalOut mogo2;
 
-extern pros::adi::DigitalOut hang1;
+extern bool autoSelected;
+
+extern pros::adi::DigitalOut hang;
 extern bool hangState;
-extern pros::adi::DigitalOut hang2;
+
+extern pros::adi::DigitalOut intakeLift;
+
+extern pros::adi::DigitalOut doinker;
+extern bool doinkerState;
 
 extern pros::MotorGroup leftSide;
 extern pros::MotorGroup rightSide;

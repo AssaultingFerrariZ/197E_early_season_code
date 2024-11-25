@@ -1,6 +1,9 @@
 #pragma once
 
 #include "RamseteController.hpp"
+#include "liblvgl/llemu.hpp"
+#include "pros/llemu.hpp"
+#include "pros/rtos.hpp"
 #include <cmath>
 #include <math.h>
 #include <memory>
@@ -47,8 +50,13 @@ void RamseteController::execute_current_profile() {
         double linearWheelVelocity = linearVelocity/(3.25*M_PI);
         double angularWheelVelocity = angularVelocity/(3.25*M_PI);
 
-        _chassis->get_drivetrain().leftMotors->move(linearWheelVelocity-angularWheelVelocity);
-        _chassis->get_drivetrain().leftMotors->move(linearWheelVelocity+angularWheelVelocity);
-    }  
+        pros::lcd::print(4, "%f\n %f", linearWheelVelocity-angularWheelVelocity, linearWheelVelocity+angularWheelVelocity);
+        pros::lcd::print(6, "%f", _generator->getProfilePoint(d).vel);
 
+        _chassis->get_drivetrain().leftMotors->move(linearWheelVelocity-angularWheelVelocity);
+        _chassis->get_drivetrain().rightMotors->move(linearWheelVelocity+angularWheelVelocity);
+        pros::delay(_generator->get_delta_d());
+    }  
+    _chassis->get_drivetrain().leftMotors->move(0);
+    _chassis->get_drivetrain().rightMotors->move(0);
 }

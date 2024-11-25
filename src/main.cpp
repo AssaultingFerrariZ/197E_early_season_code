@@ -1,5 +1,7 @@
 #include "definitions.hpp"
-
+#include "autons.hpp"
+#include "pros/abstract_motor.hpp"
+#include "pros/misc.h"
 #include "main.h"
 /**
  * A callback function for LLEMU's center button.
@@ -7,95 +9,87 @@
  * When this callback is fired, it will toggle line 2 of the LCD text between
  * "I was pressed!" and nothing.
  */
+ pros::Controller master(pros::E_CONTROLLER_MASTER);
+
 typedef std::shared_ptr<RTMotionProfile::Bezier> BezierPtr;
-pros::Controller master(pros::E_CONTROLLER_MASTER);
 template<typename T>
 std::string toString(T to) {
 	std::stringstream ss;
 	ss << to;
 	return ss.str();
 }
-void on_center_button() {
-	static bool pressed = false;
-	pressed = !pressed;
-	if (pressed) {
-		pros::lcd::set_text(2, "I was pressed!");
-	} else {
-		pros::lcd::clear_line(2);
-	}
-}
-float wrap180(float angle) {
-	while (!(angle <= 180 && angle >= -180)) {
-		if (angle < -180) angle += 360;
-		if (angle > 180) angle -= 360;
-	}
-	return angle;
-}
 
-float clamp(float output, float min, float max) {
-	if (output < min) output = min;
-	if (output > max) output = max;
-	return output;
-}
 
-void scoreArm() {
-	static lemlib::PID scorePID(3.2, 0, 0, 0, false);
-	scorePID.reset();
-	double time = 0;
-	while (master.get_digital(pros::E_CONTROLLER_DIGITAL_R1) && !master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_DOWN)) {
-		double error = wrap180(SCORE_ARM_POS - (ladyBrownRotation.get_angle() / 100.0));
-		double output = clamp(scorePID.update(error), -127, 127);
-		// std::cout << "Error: " << error <<", Angle: " << ladyBrownRotation.get_angle() / 100. << ", Output: " << output << ", Scoring Position" << std::endl;
-		ladyBrown.move(output);
-		if (fabs(error) <= 5 || time > 2500) {
-			arm_in_load_pos = !arm_in_load_pos;
-			scorePID.reset();
-			break;
-		}
 
-		time += 10; 
-		pros::delay(10);
-	}
-}
 
-void retractArm() {
-	static lemlib::PID retractPID(1.1, 0.3, 0, 2, false);
-	retractPID.reset();
-	double time = 0;
-	while (!master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_DOWN)) {
-		double error = wrap180((arm_in_load_pos ? LOAD_ARM_POS : BASE_ARM_POS) - ladyBrownRotation.get_angle() / 100.0);
-		double output = clamp(retractPID.update(error), -127, 127);
-		ladyBrown.move(output);
-		
-		if (fabs(error) <= 0.4 || time > 3000) {
-			retractPID.print_integral();
-			retractPID.reset();
-			break;
-		}
 
-		time += 10;
-		pros::delay(10);
-
-	}
-	
-}
-
-void armMacro() {
-	scoreArm();
-	arm_in_load_pos = !arm_in_load_pos;
-	retractArm();
-	ladyBrown.brake();
-}
 /**
  * Runs initialization code. This occuras soon as the program is started.
  *
  * All other competition modes are blocked by initialize; it is recommended
  * to keep execution time for this mode under a few seconds.
  */
+
+void scoreArm() {
+	//define constants (kP higher than retraction to create faster scoring motion)
+	static lemlib::PID scorePID(3.2, 0, 0, 0, false);
+	scorePID.reset();
+	double time = 0;
+	//if the button is being held and killswitch is not triggered
+	while (master.get_digital(pros::E_CONTROLLER_DIGITAL_R1) && 
+			!master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_DOWN)) {
+		//wrap the error from -180 to 180 to enable forward and reverse movement if the arm 
+			//passes the target
+		double error = wrap180(SCORE_ARM_POS - (ladyBrownRotation.get_angle() / 100.0));
+		double output = clamp(scorePID.update(error), -127, 127);
+		ladyBrown.move(output);
+
+		//higher error tolerance because position is less precise
+		if (fabs(error) <= 5 || time > 2500) {
+			//since the macro automatically flips the position when function ends, flip it back to keep 
+				//initial position
+			arm_in_load_pos = !arm_in_load_pos;  
+			scorePID.reset();
+			break;
+		}
+
+		time += 10; //prevent infinite timeouts
+		pros::delay(10);
+	}
+}
+
+void retractArm() {
+	//define PID constants
+	static lemlib::PID retractPID(1.1, 0.3, 0, 2, false);
+	//reset integral upon execution
+	retractPID.reset();
+	double time = 0;
+	//killswitch to block arm from getting stuck
+	while (!master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_DOWN)) {
+		//target varies based on the arm's current position
+		double error = wrap180(
+			(arm_in_load_pos ? LOAD_ARM_POS : BASE_ARM_POS) - 
+					ladyBrownRotation.get_angle() / 100.0); 
+			//centidegrees to degrees
+		double output = clamp(retractPID.update(error), -127, 127);
+		ladyBrown.move(output);
+		
+		//exit the PID once within angle tolerance or timeout is reached
+		if (fabs(error) <= 0.4 || time > 3000) { 
+			break; 
+		}
+
+		time += 10; 
+		pros::delay(10);
+
+	}
+	
+}
 void initialize() {
 	robot->calibrate();
 	pros::lcd::initialize();
 	ladyBrown.set_brake_mode_all(pros::v5::MotorBrake::hold); 
+	colorSensor.set_led_pwm(100);
 	pros::Task screenTask([&] {
 		while (1) {
 			pros::lcd::print(3, "%.2f Heading", robot->getPose().theta);  // Prints status of the emulated screen LCDs
@@ -104,10 +98,18 @@ void initialize() {
 			pros::delay(20);
 		}
 	});
+
+	//run the task asynchronously
 	pros::Task armLiftTask([&] {
 		while (1) {
 			if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) {
-				armMacro();
+				scoreArm();
+				while (master.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) {}
+				//switch arm position
+				arm_in_load_pos = !arm_in_load_pos;
+				retractArm();
+				ladyBrown.brake();
+				//block additional calls of the function while the button is being pressed
 				while (master.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) {}
         	}
 			pros::delay(10);
@@ -118,31 +120,34 @@ void initialize() {
 	pros::Task colorSorter([&] {
 		while (1) { //infinitely loop the task for the program's lifetime
 
-
+			//determine if the ring is red or blue by comparing RGB values
 			bool ringColorRed = (colorSensor.get_rgb().red > colorSensor.get_rgb().blue);
 
+			//check if both color sorting is enabled and that the ring is the object being sensed
 			if (colorSensor.get_proximity() > 230 && color_sorting_enabled) {
-				if (ringColorRed == redSide) continue;
+				//if the ring color is the same as the match color, do nothing 
+				if (ringColorRed == redSide) continue; 
 				else {
-					stopIntakeControl = true;
-					pros::delay(35);
-					intake.move(0);
-					pros::delay(750);
-					stopIntakeControl = false;
-					intake.move(127);
+					stopIntakeControl = true; //prevent usercontrol code from running intake
+					pros::delay(50); //wait until the intake gets to the right position
+					intake.move(0); //stop the intake
+					// intake.move_relative(90, 127);
+					pros::delay(500); //keep the intake stopped to let the ring fly off
+					stopIntakeControl = false; //return intake control to usercontrol
+					intake.move(127); //restart intake (for autonomous)
 				}
 			}
 			pros::delay(10);
 		}
 	});	
 
-	pros::Task setPistons([&] {
-		mogo1.set_value(mogoState);
-		mogo2.set_value(mogoState);
-		hang1.set_value(hangState);
-		hang2.set_value(hangState);
-		pros::delay(20);
-	});
+	// pros::Task setPistons([&] {
+	// 	mogo1.set_value(mogoState);
+	// 	mogo2.set_value(mogoState);
+	// 	hang1.set_value(hangState);
+	// 	hang2.set_value(hangState);
+	// 	pros::delay(20);
+	// });
 
 	master.clear();
 	
@@ -183,11 +188,34 @@ float speedRatio(double percent) {
 	return percent * (127.0/100);
 }
 void autonomous() {
+	autoSelected = true;
+	// BezierPtr path(new RTMotionProfile::Bezier({0, 0}, {0.863, 15.186}, {17.254, -16.103}, {24, 0}));
+	// BezierPtr straightPath(new RTMotionProfile::Bezier(
+	// 	{0, 0}, 
+	// 	{0, 0}, 
+	// 	{0, 0}, 
+	// 	{0, 24}
+	// ));
+	// generator->generateProfile(straightPath);
+	// ramsete	->execute_current_profile();
 	auto selection = autonSelectorMap.find(currentAutoSelection);
 	if (selection != autonSelectorMap.end()) {
 		selection->second.second();
 	}
 }
+
+void flipMogo() {
+	mogoState = !mogoState;
+	mogo1.set_value(mogoState);
+	mogo2.set_value(mogoState);
+}
+
+void flipHang() {
+	hangState = !hangState;
+	hang.set_value(hangState);
+	
+}
+
 /**
  * Runs the operator control code. This function will be started in its own task
  * with the default priority and stack size whenever the robot is enabled via
@@ -202,6 +230,7 @@ void autonomous() {
  * task, not resume it from where it left off.
  */
 void opcontrol() {
+	color_sorting_enabled = false;
 	robot->cancelAllMotions();
 	//profile generation benchmarking
 	BezierPtr testPath;
@@ -211,9 +240,7 @@ void opcontrol() {
 	int end_time = pros::millis();
 	std::cout << "Start Time: " << start_time << "ms, End Time: " << end_time << "ms, Total Time: " << end_time - start_time << "ms, " << std::endl;
 	std::cout << "Length: " << generator->getProfile().size() * generator->get_delta_d() << " in" << std::endl;
-	
-	bool autoSelected = false;
-	master.print(2, 1, "Select Auton");
+	if (!autoSelected) master.print(2, 1, autonSelectorMap[currentAutoSelection].first.c_str());
 	while (!autoSelected) {
 		if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_LEFT)) {
 			master.clear_line(2);
@@ -234,21 +261,45 @@ void opcontrol() {
 	}
 	
 	while (true) {
-		if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_A)) {
-			mogoState = !mogoState;
-		}
+
 		robot->arcade(master.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y), master.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X));
 		if (!stopIntakeControl) {
 			if (master.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) intake.move(127);
 			else if (master.get_digital(pros::E_CONTROLLER_DIGITAL_L1)) intake.move(-127);
 			else intake.move(0);
 		}
-		if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_X))  {
-			redSide = !redSide;
+		if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_Y))  {
+			static int cycle = 1;
+			if (cycle == 1) {
+				color_sorting_enabled = false;
+				cycle++;
+			} else if (cycle == 2) {
+				color_sorting_enabled = true;
+				redSide = true;
+				cycle++;
+			} else if (cycle == 3) {
+				color_sorting_enabled = true;
+				redSide = false;
+				cycle = 1;
+			}
+			master.clear_line(2);
+			pros::delay(50);
+			master.print(2, 1, "Sort: %d, red: %d", color_sorting_enabled, redSide);
 		}
 
-		pros::lcd::print(3, "Proximity %d", colorSensor.get_proximity());
-		pros::lcd::print(4, toString(redSide).c_str());
+		if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_R2)) flipMogo();
+		if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_X)) flipHang();
+
+		if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_B)) {
+			static bool intakeState = false;
+			intakeLift.set_value(intakeState);
+			intakeState = !intakeState;
+		}
+
+		if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_A)) {
+			doinkerState = !doinkerState;
+			doinker.set_value(doinkerState);
+		}
 		// Arcade control scheme
 		// Sets right motor voltage
 		pros::delay(20); // Run for 20 ms then update

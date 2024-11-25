@@ -2,6 +2,7 @@
 #include <vector>
 #include "Eigen/Dense"
 #include "Eigen/src/Core/Matrix.h"
+#include "lemlib/chassis/chassis.hpp"
 #include <memory>
 namespace RTMotionProfile {
 
@@ -123,6 +124,7 @@ namespace RTMotionProfile {
         ChassisSpeeds getProfilePoint(double d);
         auto getProfile() { return profile; }
         double get_delta_d();
+        void followProfile(std::shared_ptr<lemlib::Chassis> _chassis);
     private:
         std::shared_ptr<Constraints> constraints;
         MotionProfile profile;
@@ -145,4 +147,5 @@ namespace RTMotionProfile {
         double accel_dist;
         double decel_dist;
     };
+
 }
