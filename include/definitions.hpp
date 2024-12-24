@@ -6,16 +6,18 @@
 #include "MotionProfile.hpp"
 #include "RamseteController.hpp"
 #include "pros/adi.hpp"
+#include "pros/misc.hpp"
 
 extern pros::Optical colorSensor;
+
+extern pros::Controller master;
 
 extern pros::Motor intake;
 extern pros::MotorGroup ladyBrown;
 extern pros::Rotation ladyBrownRotation;
 
-extern pros::adi::DigitalOut mogo1;
+extern pros::adi::DigitalOut mogo;
 extern bool mogoState;
-extern pros::adi::DigitalOut mogo2;
 
 extern bool autoSelected;
 
@@ -46,6 +48,9 @@ extern std::shared_ptr<RamseteController> ramsete;
 extern bool stopIntakeControl;
 extern bool redSide;
 extern bool color_sorting_enabled;
+
+void scoreArm();
+void retractArm();
 
 extern std::map<int, std::pair<std::string, std::function<void()>>> autonSelectorMap;
 
