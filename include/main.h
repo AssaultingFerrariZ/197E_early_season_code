@@ -35,23 +35,11 @@
 #define PROS_USE_LITERALS
 
 #include "api.h"
-#include <cstddef>
-#include <cstdint>
-#include <functional>
-#include <iostream>
-#include <map>
-#include <math.h>
+#include <algorithm>
+#include <cstdlib>
 #include <memory>
-#include <ostream>
-#include <sstream>
-#include <string>
-#include <functional>
-#include <map>
 #include <utility>
-#include "pros/misc.h"
-#include "pros/llemu.hpp"
-#include "pros/misc.hpp"
-#include "pros/rtos.hpp"
+#include <vector>
 /**
  * You should add more #includes here
  */

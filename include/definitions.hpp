@@ -7,6 +7,8 @@
 #include "RamseteController.hpp"
 #include "pros/adi.hpp"
 #include "pros/misc.hpp"
+#include <memory>
+#include <map>
 
 extern pros::Optical colorSensor;
 
@@ -49,15 +51,11 @@ extern bool stopIntakeControl;
 extern bool redSide;
 extern bool color_sorting_enabled;
 
-void scoreArm();
-void retractArm();
+void moveArm(double angle);
 
 extern std::map<int, std::pair<std::string, std::function<void()>>> autonSelectorMap;
 
 extern const double BASE_ARM_POS;
 extern const double LOAD_ARM_POS;
-extern const double SCORE_ARM_POS;
-
-extern bool arm_in_load_pos;
 
 extern int currentAutoSelection;

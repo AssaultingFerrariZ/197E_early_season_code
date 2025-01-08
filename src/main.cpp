@@ -53,16 +53,23 @@ void initialize() {
 	//run the task asynchronously
 	pros::Task armLiftTask([&] {
 		while (1) {
-			if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) {
-				scoreArm();
-				while (master.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) {}
-				//switch arm position
-				arm_in_load_pos = !arm_in_load_pos;
-				retractArm();
-				ladyBrown.brake();
-				//block additional calls of the function while the button is being pressed
-				while (master.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) {}
-        	}
+			static bool manualControl = false;
+			static bool loadArm = false;
+			if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R1) && ladyBrownRotation.get_angle() / 100.0 < 245) {
+				manualControl = true;
+				ladyBrown.move(127);
+			} else {
+				ladyBrown.move(0);
+			}
+
+			if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L1)) {
+				if (!manualControl) loadArm = !loadArm;
+				double target = loadArm ? LOAD_ARM_POS : BASE_ARM_POS;
+				moveArm(target);
+				manualControl = false;
+			}
+
+
 			pros::delay(10);
 		}
 	});
@@ -215,9 +222,9 @@ void opcontrol() {
 		// 	master.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X)))));
 
 		if (!stopIntakeControl) {
-			if (master.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) intake.move(127);
-			else if (master.get_digital(pros::E_CONTROLLER_DIGITAL_L1)) intake.move(-127);
-			else intake.move(0);
+			// if (master.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) intake.move(127);
+			// else if (master.get_digital(pros::E_CONTROLLER_DIGITAL_L1)) intake.move(-127);
+			// else intake.move(0);
 		}
 		if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_Y))  {
 			static int cycle = 1;

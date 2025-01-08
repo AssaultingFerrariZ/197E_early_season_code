@@ -1,13 +1,7 @@
 #include "MotionProfile.hpp"
 #include "Eigen/src/Core/Matrix.h"
 #include "lemlib/chassis/chassis.hpp"
-#include <algorithm>
-#include <cmath>
-#include <cstdlib>
-#include <memory>
-#include <utility>
-#include <vector>
-#include <math.h>
+
 
 double RTMotionProfile::Pose::getDistance(Pose pose) {
     return sqrt(pow(pose.x - this->x, 2) + pow(pose.y - this->y, 2));

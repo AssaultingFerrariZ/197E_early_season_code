@@ -8,8 +8,8 @@ pros::Controller master(pros::E_CONTROLLER_MASTER);
 
 pros::Optical colorSensor(11);
 pros::Motor intake(-19, pros::v5::MotorGears::blue, pros::v5::MotorEncoderUnits::deg);
-pros::MotorGroup ladyBrown({7, -8}, pros::v5::MotorGears::green, pros::v5::MotorEncoderUnits::deg); 
-pros::Rotation ladyBrownRotation(2);
+pros::MotorGroup ladyBrown({18, -1}, pros::v5::MotorGears::green, pros::v5::MotorEncoderUnits::deg); 
+pros::Rotation ladyBrownRotation(14);
 pros::adi::DigitalOut mogo('A');
 bool mogoState = LOW;
 
@@ -24,7 +24,7 @@ bool doinkerState = LOW;
 pros::adi::DigitalOut intakeLift('D');
 
 
-pros::MotorGroup leftSide({1, -12, -13}, pros::v5::MotorGears::blue, pros::v5::MotorEncoderUnits::deg);
+pros::MotorGroup leftSide({15, -12, -10}, pros::v5::MotorGears::blue, pros::v5::MotorEncoderUnits::deg);
 pros::MotorGroup rightSide({-4, 16, 9}, pros::v5::MotorGears::blue, pros::v5::MotorEncoderUnits::deg);
 
 // Drivetrain setup
@@ -48,9 +48,9 @@ lemlib::ControllerSettings angular_controller(
     0, 
     5, 
     0, 
-    1, 
-    100, 
     3, 
+    100, 
+    5, 
     500, 
     0);
 
@@ -101,52 +101,22 @@ bool color_sorting_enabled = true;
 
 // Autonomous selector map initialization
 
-void scoreArm() {
-	//define constants (kP higher than retraction to create faster scoring motion)
-	static lemlib::PID scorePID(3.2, 0, 0, 0, false);
-	scorePID.reset();
-	double time = 0;
-	//if the button is being held and killswitch is not triggered
-	while (master.get_digital(pros::E_CONTROLLER_DIGITAL_R1) && 
-			!master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_DOWN)) {
-		//wrap the error from -180 to 180 to enable forward and reverse movement if the arm 
-			//passes the target
-		double error = wrap180(SCORE_ARM_POS - (ladyBrownRotation.get_angle() / 100.0));
-		double output = clamp(scorePID.update(error), -127, 127);
-		ladyBrown.move(output);
-
-		//higher error tolerance because position is less precise
-		if (fabs(error) <= 5 || time > 2500) {
-			//since the macro automatically flips the position when function ends, flip it back to keep 
-				//initial position
-			arm_in_load_pos = !arm_in_load_pos;  
-			scorePID.reset();
-			break;
-		}
-
-		time += 10; //prevent infinite timeouts
-		pros::delay(10);
-	}
-}
-
-void retractArm() {
+void moveArm(double angle) {
 	//define PID constants
-	static lemlib::PID retractPID(1.1, 0.3, 0, 2, false);
+	static lemlib::PID armPID(4, 0.5, 0, 2, false);
 	//reset integral upon execution
-	retractPID.reset();
+	armPID.reset();
 	double time = 0;
 	//killswitch to block arm from getting stuck
 	while (!master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_DOWN)) {
 		//target varies based on the arm's current position
-		double error = wrap180(
-			(arm_in_load_pos ? LOAD_ARM_POS : BASE_ARM_POS) - 
-					ladyBrownRotation.get_angle() / 100.0); 
+		double error = (angle - ladyBrownRotation.get_angle() / 100.0); 
 			//centidegrees to degrees
-		double output = clamp(retractPID.update(error), -127, 127);
+		double output = clamp(error, -127, 127);
 		ladyBrown.move(output);
 		
 		//exit the PID once within angle tolerance or timeout is reached
-		if (fabs(error) <= 0.4 || time > 3000) { 
+		if (fabs(error) <= 1.4 || time > 1000) { 
 			break; 
 		}
 
@@ -156,8 +126,6 @@ void retractArm() {
 	}
 	
 }
-
-bool arm_in_load_pos = false;
 
 std::map<int, std::pair<std::string, std::function<void()>>> autonSelectorMap = {
     {1, {"Goal Side Red", goalSideRed}},
@@ -169,9 +137,8 @@ std::map<int, std::pair<std::string, std::function<void()>>> autonSelectorMap = 
 };
 
 // Arm position constants
-const double BASE_ARM_POS = 340;
-const double LOAD_ARM_POS = 5.71;
-const double SCORE_ARM_POS = 120;
+const double BASE_ARM_POS = 25.22;
+const double LOAD_ARM_POS = 51.15;
  
 int currentAutoSelection = 5;
 

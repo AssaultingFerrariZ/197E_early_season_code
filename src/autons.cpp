@@ -1,7 +1,9 @@
 #include "autons.hpp"
 #include "definitions.hpp"
 #include "lemlib/asset.hpp"
+#include "lemlib/chassis/chassis.hpp"
 #include "liblvgl/draw/lv_draw.h"
+#include "pros/llemu.hpp"
 #include "pros/rtos.hpp"
 #include <cmath>
 #include <sys/_intsup.h>
@@ -24,54 +26,60 @@ float clamp(float output, float min, float max) {
 	return output;
 }
 
-void testAuton() {
-    ladyBrown.set_voltage_limit_all(12000);
-    arm_in_load_pos = true;
-    robot->turnToHeading(-90, 50000);
-    retractArm();
-}
-
 
 void goalSideRed() {
     color_sorting_enabled = false;
     redSide = true;
     autoSelected = true;
     robot->setPose(0, 0, 0);
-
-    intake.move(0);
-    robot->moveToPoint(0, -22, 5000, {.forwards = false, .minSpeed = 72, .earlyExitRange = 3});
-    intake.move(0);
-    robot->turnToPoint(4, -40, 1000, {.forwards = false});
-    intake.move(0);
-    robot->moveToPoint(7.5, -45, 5000, {.forwards = false, .maxSpeed = 72});
-    intake.move(0);
-    wait(800);
+    robot->moveToPoint(35.319, 0, 5000, {.minSpeed = 127, .earlyExitRange = 2});
+    doinker.set_value(true);
+    robot->moveToPoint(56.223, 11.293, 5000, {}, false);
+    doinker.set_value(false);
+    robot->moveToPoint(35.319, 0, 5000, {.forwards = false});
+    doinker.set_value(true);
+    robot->moveToPoint(32.319, 0, 1000, {.minSpeed = 70, .earlyExitRange = .5}, false);
+    doinker.set_value(false);
+    robot->turnToHeading(180, 1000, {.direction = lemlib::AngularDirection::CCW_COUNTERCLOCKWISE});
+    robot->moveToPoint(48.294, 1.441, 5000, {.forwards = false}, false);
     mogo.set_value(true);
-    pros::delay(300);
-    robot->turnToPoint(12, -33, 5000, {.minSpeed = 20, .earlyExitRange = 3});
+    robot->moveToPoint(-0.961, -5.046, 5000);
     intake.move(127);
-    robot->moveToPoint(12, -35, 5000, {}, false);
-    wait(1000);
-    mogo.set_value(false);
+    robot->waitUntilDone();
     intake.move(0);
-    robot->moveToPoint(12, -24, 5000);
-    robot->turnToPoint(36, -36, 1000, {.forwards = false});
-    robot->moveToPoint(28, -28, 5000, {.forwards = false, .maxSpeed = 90});
-    robot->waitUntil(16);
+    doinker.set_value(true);
+    robot->turnToHeading(0, 1000);
+    robot->waitUntil(45);
+    doinker.set_value(false);
+    robot->waitUntilDone();
+    mogo.set_value(false);
+    robot->moveToPoint(32.917, 12.254, 5000);
+    moveArm(LOAD_ARM_POS);
+    intake.move(127);
+    while (intake.get_actual_velocity_all().front() > 0) {}
+    intake.move(0);
+    moveArm(30);
+    robot->turnToPoint(35.319, 34.118, 1500, {.forwards = false});
+    robot->moveToPoint(35.319, 34.118, 5000, {.forwards = false});
+    robot->waitUntil(15);
     mogo.set_value(true);
     intake.move(-127);
-    wait(350);
-    intake.move(0);
-    robot->turnToPoint(60, -10, 1000);
+    robot->turnToPoint(11.293, 62.47, 1000);
     intakeLift.set_value(true);
     intake.move(127);
-    robot->moveToPoint(55, -10, 5000, {.minSpeed = 30, .earlyExitRange = 35});
-    robot->moveToPoint(55, -10, 5000, {.maxSpeed = 20}, false);
-    wait(250);
+    robot->moveToPoint(11.293, 62.47, 5000, {.maxSpeed = 70});
     intakeLift.set_value(false);
-    robot->moveToPoint(40, -20, 5000, {.forwards = false, .maxSpeed = 50});
-    robot->turnToPoint(44, -40, 1000);
-    robot->moveToPoint(44, -40, 5000);
+    robot->turnToPoint(-2.162, 57.664, 1000);
+    robot->moveToPoint(-2.162, 57.664, 5000, {}, false);
+    moveArm(180);
+    robot->moveToPoint(28.592, 48.774, 5000, {.forwards = false, .minSpeed = 72, .earlyExitRange = 3});
+    moveArm(BASE_ARM_POS);
+    robot->turnToPoint(50.697, 44.69, 1000);
+    robot->moveToPoint(50.697, 44.69, 5000);
+
+
+
+
 
 }
 void goalSideBlue() {
