@@ -7,10 +7,11 @@
 #include "RamseteController.hpp"
 #include "pros/adi.hpp"
 #include "pros/misc.hpp"
+#include "pros/optical.hpp"
 #include <memory>
 #include <map>
 
-extern pros::Optical colorSensor;
+// extern pros::Optical colorSensor;
 
 extern pros::Controller master;
 
@@ -22,6 +23,7 @@ extern pros::adi::DigitalOut mogo;
 extern bool mogoState;
 
 extern bool autoSelected;
+extern bool autoActive;
 
 extern pros::adi::DigitalOut hang;
 extern bool hangState;
@@ -30,6 +32,8 @@ extern pros::adi::DigitalOut intakeLift;
 
 extern pros::adi::DigitalOut doinker;
 extern bool doinkerState;
+
+extern pros::Optical colorSensor;
 
 extern pros::MotorGroup leftSide;
 extern pros::MotorGroup rightSide;
@@ -57,5 +61,9 @@ extern std::map<int, std::pair<std::string, std::function<void()>>> autonSelecto
 
 extern const double BASE_ARM_POS;
 extern const double LOAD_ARM_POS;
+
+extern bool holdInIntake;
+
+void intHold();
 
 extern int currentAutoSelection;

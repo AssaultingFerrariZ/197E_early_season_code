@@ -1,5 +1,3 @@
-#pragma once
-
 #include "RamseteController.hpp"
 #include "liblvgl/llemu.hpp"
 #include "pros/llemu.hpp"

@@ -13,4 +13,9 @@ void ringSideRed();
 void ringSideBlue();
 void skills();
 
+void safeAutoLeft();
+void safeAutoRight();
+
 void testAuton();
+
+

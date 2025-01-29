@@ -3,6 +3,8 @@
 #include "pros/abstract_motor.hpp"
 #include "pros/llemu.hpp"
 #include "pros/misc.h"
+#include "pros/rtos.hpp"
+#include "pros/screen.hpp"
 #include <ios>
 #include "main.h"
 /**
@@ -33,19 +35,38 @@ double cubeScalar(double input) {
  * All other competition modes are blocked by initialize; it is recommended
  * to keep execution time for this mode under a few seconds.
  */
+bool holdInIntake = false;
 
+void intHold() {
+    while (1) {
+		if (holdInIntake) {
+			intake.move(127);
+			if (!(colorSensor.get_proximity() > 200)) {
+				intake.move(0);
+				holdInIntake = false;
+
+			}
+		}
+		pros::delay(10);
+	}
+}
 
 void initialize() {
 	robot->calibrate();
 	pros::lcd::initialize();
 	ladyBrown.set_brake_mode_all(pros::v5::MotorBrake::hold); 
-	colorSensor.set_led_pwm(100);
+	colorSensor.set_led_pwm(50);
+	// pros::screen::touch_callback([] {
+	// 		pros::delay(1500);
+	// 		autonomous();
+	// 	}, TOUCH_PRESSED);
+	pros::Task intakeStop(intHold);
 	pros::Task screenTask([&] {
 		while (1) {
 			pros::lcd::print(3, "%.2f Heading", robot->getPose().theta);  // Prints status of the emulated screen LCDs
 			pros::lcd::print(1, "%.2f X", robot->getPose().x);  // Prints status of the emulated screen LCDs
 			pros::lcd::print(2, "%.2f Y", robot->getPose().y);  
-			pros::lcd::print(3, "Proximity: %.2f", colorSensor.get_proximity());
+			// pros::lcd::print(3, "Proximity: %.2f", colorSensor.get_proximity());
 			pros::delay(20);
 		}
 	});
@@ -53,51 +74,67 @@ void initialize() {
 	//run the task asynchronously
 	pros::Task armLiftTask([&] {
 		while (1) {
+			//define booleans
 			static bool manualControl = false;
 			static bool loadArm = false;
-			if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R1) && ladyBrownRotation.get_angle() / 100.0 < 245) {
-				manualControl = true;
-				ladyBrown.move(127);
-			} else {
-				ladyBrown.move(0);
-			}
+			if (!autoActive) {
+				//move forward button
+				if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R1) && ladyBrownRotation.get_angle() / 100.0 < 220) {
+					manualControl = true;
+					ladyBrown.move(127);
+				} else {
+					ladyBrown.move(0);
+				}
 
-			if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L1)) {
-				if (!manualControl) loadArm = !loadArm;
-				double target = loadArm ? LOAD_ARM_POS : BASE_ARM_POS;
-				moveArm(target);
-				manualControl = false;
+				//retract button
+				if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L1)) {
+					if (!manualControl) loadArm = !loadArm;
+					double target = loadArm ? (manualControl ? LOAD_ARM_POS - 3.8 : LOAD_ARM_POS): BASE_ARM_POS;
+					moveArm(target);
+					manualControl = false;
+				}
 			}
-
 
 			pros::delay(10);
 		}
 	});
 	
 	//run the function in a task for asynchronous detection for both auton and driver
-	// pros::Task colorSorter([&] {
-	// 	while (1) { //infinitely loop the task for the program's lifetime
+	pros::Task colorSorter([&] {
+		// enum RingColor {
+		// 	RED = true,
+		// 	BLUE = false,
+		// 	UNKNOWN = true
+		// };
+		// while (1) { //infinitely loop the task for the program's lifetime
 
-	// 		//determine if the ring is red or blue by comparing RGB values
-	// 		bool ringColorRed = (colorSensor.get_rgb().red > colorSensor.get_rgb().blue);
+		// 	//determine if the ring is red or blue by comparing RGB values
+		// 	RingColor ringColor;
 
-	// 		//check if both color sorting is enabled and that the ring is the object being sensed
-	// 		if (colorSensor.get_proximity() > 230 && color_sorting_enabled) {
-	// 			//if the ring color is the same as the match color, do nothing 
-	// 			if (ringColorRed == redSide) continue; 
-	// 			else {
-	// 				stopIntakeControl = true; //prevent usercontrol code from running intake
-	// 				pros::delay(50); //wait until the intake gets to the right position
-	// 				intake.move(0); //stop the intake
-	// 				// intake.move_relative(90, 127);
-	// 				pros::delay(500); //keep the intake stopped to let the ring fly off
-	// 				stopIntakeControl = false; //return intake control to usercontrol
-	// 				intake.move(127); //restart intake (for autonomous)
-	// 			}
-	// 		}
-	// 		pros::delay(10);
-	// 	}
-	// });	
+		// 	double hue = colorSensor.get_hue();
+		// 	if (hue < 50 && hue > 0) {
+		// 		ringColor = RED;
+		// 	}
+		// 	else if (hue < 240 && hue > 180) {
+		// 		ringColor = BLUE;
+		// 	} else {
+		// 		ringColor = UNKNOWN;
+		// 	}
+		// 	//check if both color sorting is enabled and that the ring is the object being sensed
+		// 	if (colorSensor.get_proximity() > 230 && color_sorting_enabled) {
+		// 		//if the ring color is the same as the match color, do nothing 
+		// 		if (ringColor != redSide) {
+		// 			stopIntakeControl = true; //prevent usercontrol code from running intake
+		// 			pros::delay(60); //wait until the intake gets to the right position
+		// 			intake.move(-127);
+		// 			pros::delay(100); //keep the intake stopped to let the ring fly off
+		// 			stopIntakeControl = false; //return intake control to usercontrol
+		// 			if (autoActive) intake.move(127); //restart intake (for autonomous)
+		// 		}
+		// 	}
+		// 	pros::delay(10);
+		// }
+	});	
 
 	// pros::Task setPistons([&] {
 	// 	mogo1.set_value(mogoState);
@@ -148,12 +185,13 @@ float speedRatio(double percent) {
 ASSET(pptest_txt)
 void autonomous() {
 	autoSelected = true;
+	autoActive = true;
 	auto selection = autonSelectorMap.find(currentAutoSelection);
 	if (selection != autonSelectorMap.end()) {
 		selection->second.second();
 	}
-
 	
+	autoActive = false;
 	
 }
 
@@ -192,6 +230,7 @@ void opcontrol() {
 	int end_time = pros::millis();
 	std::cout << "Start Time: " << start_time << "ms, End Time: " << end_time << "ms, Total Time: " << end_time - start_time << "ms, " << std::endl;
 	std::cout << "Length: " << generator->getProfile().size() * generator->get_delta_d() << " in" << std::endl;
+	ladyBrown.move(0);
 	if (!autoSelected) master.print(2, 1, autonSelectorMap[currentAutoSelection].first.c_str());
 	while (!autoSelected && !pros::c::competition_is_connected()) {
 		if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_LEFT)) {
@@ -222,9 +261,9 @@ void opcontrol() {
 		// 	master.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X)))));
 
 		if (!stopIntakeControl) {
-			// if (master.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) intake.move(127);
-			// else if (master.get_digital(pros::E_CONTROLLER_DIGITAL_L1)) intake.move(-127);
-			// else intake.move(0);
+			if (master.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) intake.move(127);
+			else if (master.get_digital(pros::E_CONTROLLER_DIGITAL_UP)) intake.move(-127);
+			else intake.move(0);
 		}
 		if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_Y))  {
 			static int cycle = 1;
