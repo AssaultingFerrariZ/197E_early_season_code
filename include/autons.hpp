@@ -13,8 +13,12 @@ void ringSideRed();
 void ringSideBlue();
 void skills();
 
-void safeAutoLeft();
-void safeAutoRight();
+void safeAutoLeftRed();
+void safeAutoLeftBlue();
+void safeAutoRightRed();
+void safeAutoRightBlue();
+void soloAWPRed();
+void soloAWPBlue();
 
 void testAuton();
 

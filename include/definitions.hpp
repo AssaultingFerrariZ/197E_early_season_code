@@ -6,6 +6,7 @@
 #include "MotionProfile.hpp"
 #include "RamseteController.hpp"
 #include "pros/adi.hpp"
+#include "pros/distance.hpp"
 #include "pros/misc.hpp"
 #include "pros/optical.hpp"
 #include <memory>
@@ -34,6 +35,17 @@ extern pros::adi::DigitalOut doinker;
 extern bool doinkerState;
 
 extern pros::Optical colorSensor;
+extern pros::Distance intakeDistance;
+
+extern bool autoHasBeenActive;
+
+extern pros::adi::DigitalOut odomRetract;
+
+enum RingColor {
+    RED,
+    BLUE,
+    UNKNOWN
+};
 
 extern pros::MotorGroup leftSide;
 extern pros::MotorGroup rightSide;
@@ -52,18 +64,21 @@ extern RTMotionProfile::Constraints mp_constraints;
 extern std::shared_ptr<RTMotionProfile::ProfileGenerator> generator;
 extern std::shared_ptr<RamseteController> ramsete;
 extern bool stopIntakeControl;
-extern bool redSide;
+extern RingColor redSide;
 extern bool color_sorting_enabled;
-
-void moveArm(double angle);
 
 extern std::map<int, std::pair<std::string, std::function<void()>>> autonSelectorMap;
 
 extern const double BASE_ARM_POS;
 extern const double LOAD_ARM_POS;
 
+extern double arm_target;
+extern bool arm_pid_enabled;
+
 extern bool holdInIntake;
 
 void intHold();
 
 extern int currentAutoSelection;
+
+extern void decelerate(float x, float y, int timeout, float decelerateSpeed = 20, float earlyExitRange = 0.5, bool async = false);

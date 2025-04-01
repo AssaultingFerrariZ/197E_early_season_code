@@ -1,3 +1,4 @@
+#include "RamseteController.hpp"
 #include "definitions.hpp"
 #include "autons.hpp"
 #include "pros/abstract_motor.hpp"
@@ -6,6 +7,7 @@
 #include "pros/rtos.hpp"
 #include "pros/screen.hpp"
 #include <ios>
+#include <queue>
 #include "main.h"
 /**
  * A callback function for LLEMU's center button.
@@ -13,7 +15,7 @@
  * When this callback is fired, it will toggle line 2 of the LCD text between
  * "I was pressed!" and nothing.
  */
-
+using namespace RTMotionProfile;
 typedef std::shared_ptr<RTMotionProfile::Bezier> BezierPtr;
 template<typename T>
 std::string toString(T to) {
@@ -35,114 +37,71 @@ double cubeScalar(double input) {
  * All other competition modes are blocked by initialize; it is recommended
  * to keep execution time for this mode under a few seconds.
  */
-bool holdInIntake = false;
-
-void intHold() {
-    while (1) {
-		if (holdInIntake) {
-			intake.move(127);
-			if (!(colorSensor.get_proximity() > 200)) {
-				intake.move(0);
-				holdInIntake = false;
-
-			}
-		}
-		pros::delay(10);
-	}
-}
 
 void initialize() {
 	robot->calibrate();
 	pros::lcd::initialize();
-	ladyBrown.set_brake_mode_all(pros::v5::MotorBrake::hold); 
+	ladyBrown.set_brake_mode_all(pros::v5::MotorBrake::hold);
 	colorSensor.set_led_pwm(50);
-	// pros::screen::touch_callback([] {
-	// 		pros::delay(1500);
-	// 		autonomous();
-	// 	}, TOUCH_PRESSED);
-	pros::Task intakeStop(intHold);
-	pros::Task screenTask([&] {
-		while (1) {
-			pros::lcd::print(3, "%.2f Heading", robot->getPose().theta);  // Prints status of the emulated screen LCDs
-			pros::lcd::print(1, "%.2f X", robot->getPose().x);  // Prints status of the emulated screen LCDs
-			pros::lcd::print(2, "%.2f Y", robot->getPose().y);  
-			// pros::lcd::print(3, "Proximity: %.2f", colorSensor.get_proximity());
-			pros::delay(20);
-		}
-	});
+
+	// pros::Task checkAuto([&] {
+	// 	while (1) {
+	// 		if (autoActive) autoHasBeenActive = true;
+	// 	}
+	// });
+
+	// pros::Task screenTask([&] {
+	// 	while (1) {
+	// 		pros::lcd::print(3, "%.2f Heading", robot->getPose().theta);  // Prints status of the emulated screen LCDs
+	// 		pros::lcd::print(1, "%.2f X", robot->getPose().x);  // Prints status of the emulated screen LCDs
+	// 		pros::lcd::print(2, "%.2f Y", robot->getPose().y);  
+	// 		// pros::lcd::print(3, "Proximity: %.2f", colorSensor.get_proximity());
+	// 		pros::delay(20);
+	// 	}
+	// });
 
 	//run the task asynchronously
 	pros::Task armLiftTask([&] {
 		while (1) {
-			//define booleans
-			static bool manualControl = false;
-			static bool loadArm = false;
-			if (!autoActive) {
-				//move forward button
-				if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R1) && ladyBrownRotation.get_angle() / 100.0 < 220) {
-					manualControl = true;
-					ladyBrown.move(127);
-				} else {
-					ladyBrown.move(0);
-				}
-
-				//retract button
-				if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L1)) {
-					if (!manualControl) loadArm = !loadArm;
-					double target = loadArm ? (manualControl ? LOAD_ARM_POS - 3.8 : LOAD_ARM_POS): BASE_ARM_POS;
-					moveArm(target);
-					manualControl = false;
-				}
-			}
-
+			static lemlib::PID armPID(5, 0, 2, 0, true);
+			double error = arm_target - ladyBrownRotation.get_angle() / 100.0;
+			double output = clamp(error, -127, 127);
+			if (arm_pid_enabled) ladyBrown.move(output);
 			pros::delay(10);
 		}
 	});
 	
 	//run the function in a task for asynchronous detection for both auton and driver
 	pros::Task colorSorter([&] {
-		// enum RingColor {
-		// 	RED = true,
-		// 	BLUE = false,
-		// 	UNKNOWN = true
-		// };
-		// while (1) { //infinitely loop the task for the program's lifetime
+	
+		while (1) { //infinitely loop the task for the program's lifetime
 
-		// 	//determine if the ring is red or blue by comparing RGB values
-		// 	RingColor ringColor;
-
-		// 	double hue = colorSensor.get_hue();
-		// 	if (hue < 50 && hue > 0) {
-		// 		ringColor = RED;
-		// 	}
-		// 	else if (hue < 240 && hue > 180) {
-		// 		ringColor = BLUE;
-		// 	} else {
-		// 		ringColor = UNKNOWN;
-		// 	}
-		// 	//check if both color sorting is enabled and that the ring is the object being sensed
-		// 	if (colorSensor.get_proximity() > 230 && color_sorting_enabled) {
-		// 		//if the ring color is the same as the match color, do nothing 
-		// 		if (ringColor != redSide) {
-		// 			stopIntakeControl = true; //prevent usercontrol code from running intake
-		// 			pros::delay(60); //wait until the intake gets to the right position
-		// 			intake.move(-127);
-		// 			pros::delay(100); //keep the intake stopped to let the ring fly off
-		// 			stopIntakeControl = false; //return intake control to usercontrol
-		// 			if (autoActive) intake.move(127); //restart intake (for autonomous)
-		// 		}
-		// 	}
-		// 	pros::delay(10);
-		// }
+			//determine if the ring is red or blue by comparing RGB values
+			RingColor ringColor;
+			double hue = colorSensor.get_hue();
+			if (colorSensor.get_proximity() > 150) {
+				if (hue < 50 && hue > 0) {
+					ringColor = RED;
+				} else if (hue < 240 && hue > 180) {
+					ringColor = BLUE;
+				} else {
+					ringColor = UNKNOWN;
+				}
+			}
+			if (intakeDistance.get_distance() <= 35) {
+				if (color_sorting_enabled && redSide != ringColor && ringColor != UNKNOWN) {
+					stopIntakeControl = true;
+					pros::delay(160);
+					intake.move(-127);
+					pros::delay(75);
+					if (autoActive) intake.move(127); 
+					stopIntakeControl = false;
+				}
+			}
+			
+			pros::delay(10);
+		}
 	});	
-
-	// pros::Task setPistons([&] {
-	// 	mogo1.set_value(mogoState);
-	// 	mogo2.set_value(mogoState);
-	// 	hang1.set_value(hangState);
-	// 	hang2.set_value(hangState);
-	// 	pros::delay(20);
-	// });
 
 	master.clear();
 	
@@ -184,13 +143,21 @@ float speedRatio(double percent) {
 }
 ASSET(pptest_txt)
 void autonomous() {
+	master.clear();
+	master.print(1, 1, "Entered Auto");
 	autoSelected = true;
 	autoActive = true;
-	auto selection = autonSelectorMap.find(currentAutoSelection);
-	if (selection != autonSelectorMap.end()) {
-		selection->second.second();
-	}
-	
+	// auto selection = autonSelectorMap.find(currentAutoSelection);
+	// if (selection != autonSelectorMap.end()) {
+	// 	selection->second.second();
+	// }
+
+	pros::lcd::print(7, "hi");
+	BezierPtr testPath = std::make_shared<RTMotionProfile::Bezier>(RTMotionProfile::Bezier({-0, -0}, {-0, -0}, {-0, -0}, {-0, 24}));
+	pros::lcd::print(8, "hello");
+	generator->generateProfile(testPath);	
+	ramsete->execute_current_profile();
+
 	autoActive = false;
 	
 }
@@ -221,15 +188,17 @@ void flipHang() {
  */
 void opcontrol() {
 	color_sorting_enabled = false;
+	bool manualControl = false;
+	bool arm_in_load_pos = false;
 	robot->cancelAllMotions();
 	//profile generation benchmarking
-	BezierPtr testPath;
-	int start_time = pros::millis();
-	testPath = std::make_shared<RTMotionProfile::Bezier>(RTMotionProfile::Bezier({-12, -36}, {-12, -60}, {-36, -36}, {-36, -60}));
-	generator->generateProfile(testPath);
-	int end_time = pros::millis();
-	std::cout << "Start Time: " << start_time << "ms, End Time: " << end_time << "ms, Total Time: " << end_time - start_time << "ms, " << std::endl;
-	std::cout << "Length: " << generator->getProfile().size() * generator->get_delta_d() << " in" << std::endl;
+	// BezierPtr testPath;
+	// int start_time = pros::millis();
+	// testPath = std::make_shared<RTMotionProfile::Bezier>(RTMotionProfile::Bezier({-12, -36}, {-12, -60}, {-36, -36}, {-36, -60}));
+	// generator->generateProfile(testPath);
+	// int end_time = pros::millis();
+	// std::cout << "Start Time: " << start_time << "ms, End Time: " << end_time << "ms, Total Time: " << end_time - start_time << "ms, " << std::endl;
+	// std::cout << "Length: " << generator->getProfile().size() * generator->get_delta_d() << " in" << std::endl;
 	ladyBrown.move(0);
 	if (!autoSelected) master.print(2, 1, autonSelectorMap[currentAutoSelection].first.c_str());
 	while (!autoSelected && !pros::c::competition_is_connected()) {
@@ -250,7 +219,6 @@ void opcontrol() {
 			autoSelected = true;
 		}
 	}
-	
 	while (true) {
 		robot->arcade(master.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y), master.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X));
 		// leftSide.move_voltage((speedRatio(cubeScalar(
@@ -272,16 +240,19 @@ void opcontrol() {
 				cycle++;
 			} else if (cycle == 2) {
 				color_sorting_enabled = true;
-				redSide = true;
+				redSide = RED;
 				cycle++;
 			} else if (cycle == 3) {
 				color_sorting_enabled = true;
-				redSide = false;
+				redSide = BLUE;
 				cycle = 1;
 			}
+			bool isRed;
+			if (redSide == RED) isRed = true;
+			else if (redSide == BLUE) isRed = false;
 			master.clear_line(2);
 			pros::delay(50);
-			master.print(2, 1, "Sort: %d, red: %d", color_sorting_enabled, redSide);
+			master.print(2, 1, "Sort: %d, red: %d", color_sorting_enabled, isRed);
 		}
 
 		if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_R2)) flipMogo();
@@ -297,8 +268,24 @@ void opcontrol() {
 			doinkerState = !doinkerState;
 			doinker.set_value(doinkerState);
 		}
-		// Arcade control scheme
-		// Sets right motor voltage
+		
+		if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R1) && ladyBrownRotation.get_angle() / 100.0 < 215) {
+			arm_pid_enabled = false;
+			manualControl = true;
+			ladyBrown.move(127);
+		} else if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L1)) {
+			arm_pid_enabled = true;
+			if (!manualControl) arm_in_load_pos = !arm_in_load_pos;
+			arm_target = arm_in_load_pos ? (manualControl ? LOAD_ARM_POS - 1.5 : LOAD_ARM_POS + 1.5): BASE_ARM_POS;
+			manualControl = false;
+		} else if (!arm_pid_enabled) {
+			ladyBrown.move(0);
+		}
+
+		if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_DOWN)) {
+			odomRetract.set_value(true);
+		}
+
 		pros::delay(20); // Run for 20 ms then update
 	}
 }

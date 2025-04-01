@@ -1,6 +1,8 @@
 #include "MotionProfile.hpp"
 #include "Eigen/src/Core/Matrix.h"
 #include "lemlib/chassis/chassis.hpp"
+#include "pros/llemu.hpp"
+#include <memory>
 
 
 double RTMotionProfile::Pose::getDistance(Pose pose) {
@@ -215,6 +217,12 @@ void RTMotionProfile::ProfileGenerator::generateProfile(std::shared_ptr<abstract
         )));
         index++;
     }
+    for (const auto& point : forwardPass) {
+        pros::lcd::print(1, "Dist: %.2f, Vel: %.2f", point.dist, point.vel);
+    }
+    for (auto curvature_val : cache) {
+        pros::lcd::print(2, "Curvature: %.2f", curvature_val);
+    }
     cache.clear();
 }
 
@@ -234,15 +242,55 @@ RTMotionProfile::ChassisSpeeds RTMotionProfile::ProfileGenerator::getProfilePoin
 double RTMotionProfile::ProfileGenerator::get_delta_d() { return this->dd; }
 
 void RTMotionProfile::ProfileGenerator::followProfile(std::shared_ptr<lemlib::Chassis> _chassis) {
+    // Initialize variables
+    double currentDistance = 0.0;
+    double lastTime = pros::millis();  // Get the current timestamp in milliseconds
     double totalDistance = this->getProfile().back().dist;
-    double delta_d = this->get_delta_d();
-    for (double d = 0; d <= totalDistance; d+=delta_d) {
-        auto wheelSpeeds = this->getProfilePoint(d);
+    // Loop until the robot has completed the path
+    while (currentDistance < totalDistance) {
+        // Get the profile point for the current distance
+        RTMotionProfile::ChassisSpeeds speeds = this->getProfilePoint(currentDistance);
         
-        _chassis->get_drivetrain().leftMotors->move(wheelSpeeds.vel-wheelSpeeds.omega);
-        _chassis->get_drivetrain().rightMotors->move(wheelSpeeds.vel+wheelSpeeds.omega);
-        pros::delay(this->get_delta_d());
-    }  
-    _chassis->get_drivetrain().leftMotors->move(0);
-    _chassis->get_drivetrain().rightMotors->move(0);
+        // Get velocities and other parameters from the profile
+        double targetVelocity = speeds.vel;
+        double targetAngularVelocity = speeds.omega;
+        double targetAcceleration = speeds.accel;
+        RTMotionProfile::Pose targetPose = speeds.pose;
+
+        // Compute the time difference from the last loop (for control loops)
+        double currentTime = pros::millis();
+        double deltaTime = (currentTime - lastTime) / 1000.0;  // Time difference in seconds
+        lastTime = currentTime;
+
+        // Update the robot's position and speed (Control logic can vary based on hardware)
+        // Assuming we have motor objects for left and right motors:
+        double leftVelocity = targetVelocity - targetAngularVelocity * this->constraints->track_width / 2;
+        double rightVelocity = targetVelocity + targetAngularVelocity * this->constraints->track_width / 2;
+
+        // Convert target velocity to motor control (this part depends on your motor setup and feedback system)
+        double leftMotorSpeed = leftVelocity;  // For example, you could scale this by a factor to match your motor's speed.
+        double rightMotorSpeed = rightVelocity;
+
+        // Apply the calculated motor speeds
+        // Assuming `leftMotor` and `rightMotor` are instances of pros::Motor
+        // _chassis->get_drivetrain().leftMotors->move_velocity(leftMotorSpeed);
+        // _chassis->get_drivetrain().rightMotors->move_velocity(rightMotorSpeed);
+
+        // Optionally, you can add additional logic for smoothing acceleration/deceleration or adding more feedback control
+        // If you're using an IMU or encoders, you could add feedback loops here to adjust velocities in real-time.
+
+        // Update the current distance based on the speed and deltaTime
+        currentDistance += targetVelocity * deltaTime;  // Approximate distance covered in this time step
+
+        // Optionally, print out debug info
+        pros::lcd::print(0, "Distance: %.2f, Velocity: %.2f, Angular Vel: %.2f", currentDistance, targetVelocity, targetAngularVelocity);
+        
+        // Small delay to allow for processing (can adjust this value based on your control loop frequency)
+        pros::delay(20);  // 20ms delay
+    }
+
+    // Stop motors when the profile is finished
+    _chassis->get_drivetrain().leftMotors->move_velocity(0);
+    _chassis->get_drivetrain().rightMotors->move_velocity(0);
+    pros::lcd::print(0, "Motion Profile Complete");
 }

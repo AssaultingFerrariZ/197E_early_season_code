@@ -24,6 +24,7 @@
 #include <cstdbool>
 #include <cstddef>
 #include <cstdint>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>

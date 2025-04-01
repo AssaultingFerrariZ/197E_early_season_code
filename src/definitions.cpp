@@ -1,15 +1,16 @@
 #include "definitions.hpp"
 #include "autons.hpp"
 #include "pros/adi.hpp"
+#include "pros/distance.hpp"
 #include "pros/rtos.hpp"
 
 // Sensor and motor initialization
 pros::Controller master(pros::E_CONTROLLER_MASTER);
 
-pros::Optical colorSensor(16);
+pros::Optical colorSensor(15);
 pros::Motor intake(-8, pros::v5::MotorGears::blue, pros::v5::MotorEncoderUnits::deg);
-pros::MotorGroup ladyBrown({-11, 13}, pros::v5::MotorGears::green, pros::v5::MotorEncoderUnits::deg); 
-pros::Rotation ladyBrownRotation(12);
+pros::MotorGroup ladyBrown({-1, 3}, pros::v5::MotorGears::green, pros::v5::MotorEncoderUnits::deg); 
+pros::Rotation ladyBrownRotation(2);
 pros::adi::DigitalOut mogo('C');
 bool mogoState = LOW;
 
@@ -24,8 +25,9 @@ bool doinkerState = LOW;
 
 pros::adi::DigitalOut intakeLift('A');
 
+pros::Distance intakeDistance(16);
 
-pros::MotorGroup leftSide({20, -1, -3}, pros::v5::MotorGears::blue, pros::v5::MotorEncoderUnits::deg);
+pros::MotorGroup leftSide({20, -11, -13}, pros::v5::MotorGears::blue, pros::v5::MotorEncoderUnits::deg);
 pros::MotorGroup rightSide({-18, 6, 17}, pros::v5::MotorGears::blue, pros::v5::MotorEncoderUnits::deg);
 
 // Drivetrain setup
@@ -35,23 +37,23 @@ lemlib::Drivetrain drivetrain(&leftSide, &rightSide, 13.5, 3.25, 450, 8);
 lemlib::ControllerSettings lateral_controller(
     8, 
     0, 
-    12, 
+    12.5, 
     0, 
     1, 
-    100, 
+    300, 
     3, 
-    500, 
+    750, 
     20);
 
 // Angular PID controller configuration
 lemlib::ControllerSettings angular_controller(
-    2, 
-    0, 
-    5, 
-    0, 
-    3, 
-    100, 
-    5, 
+    2.25, 
+    0.1, 
+    19.225, 
+    7, 
+    0.5, 
+    300, 
+    1.5, 
     500, 
     0);
 
@@ -97,52 +99,40 @@ std::shared_ptr<RamseteController> ramsete(new RamseteController(
 
 // Global variables initialization
 bool stopIntakeControl = false;
-bool redSide = false;
+RingColor redSide = UNKNOWN;
 bool color_sorting_enabled = true;
 
-// Autonomous selector map initialization
-
-void moveArm(double angle) {
-	//define PID constants
-        static lemlib::PID armPID(4, 1.25, 0, 5, false);
-        //reset integral upon execution
-        armPID.reset();
-        double time = 0;
-        //killswitch to block arm from getting stuck
-        while (!master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_DOWN)) {
-            //target varies based on the arm's current position
-            double error = (angle - ladyBrownRotation.get_angle() / 100.0); 
-                //centidegrees to degrees
-            double output = clamp(error, -127, 127);
-            ladyBrown.move(output);
-            
-            //exit the PID once within angle tolerance or timeout is reached
-            if (fabs(error) < 1 || time > 1000) { 
-                ladyBrown.move(0);
-                break; 
-            }
-
-            time += 10; 
-            pros::delay(10);
-
-        }
-	
-}
+// Autonomous selector map initialization}
 
 std::map<int, std::pair<std::string, std::function<void()>>> autonSelectorMap = {
     {1, {"Goal Side Red", goalSideRed}},
     {2, {"Goal Side Blue", goalSideBlue}},
     {3, {"Ring Side Red", ringSideRed}},
     {4, {"Ring Side Blue", ringSideBlue}},
-    {5, {"Safe Auto Left", safeAutoLeft}},
-    {6, {"Safe Auto Right", safeAutoRight}},
-    {7, {"Skills", skills}},  
+    {5, {"Safe Left Red", safeAutoLeftRed}},
+    {6, {"Safe Left Blue", safeAutoLeftBlue}},
+    {7, {"Safe Right Red", safeAutoRightRed}},
+    {8, {"Safe Right Blue", safeAutoRightBlue}},
+    {9, {"Solo AWP Red", soloAWPRed}},
+    {10, {"Solo AWP Blue", soloAWPBlue}},
+    {11, {"Skills", skills}}, 
 
 };
 
 // Arm position constants
-const double BASE_ARM_POS = 6.00;
-const double LOAD_ARM_POS = 36.9;
- 
-int currentAutoSelection = 1;
+const double BASE_ARM_POS = 5.00;
+const double LOAD_ARM_POS = 33.09;
 
+bool autoHasBeenActive = false;
+
+double arm_target = BASE_ARM_POS;
+bool arm_pid_enabled = true;
+
+int currentAutoSelection = 11;
+
+pros::adi::DigitalOut odomRetract('D');
+
+void decelerate(float x, float y, float decelerateSpeed = 20, float earlyExitRange = 0.5, bool async = false) {
+    robot->moveToPoint(x, y, 5000, {.forwards = false, .minSpeed = decelerateSpeed, .earlyExitRange = earlyExitRange});
+    robot->moveToPoint(x, y, 5000, {.forwards = false, .maxSpeed = decelerateSpeed}, async);
+}
